@@ -1,0 +1,337 @@
+#!/bin/bash
+#!usr/bin/awk
+
+# a script (ilsresc_osg ) that will present resources information 
+# in a more friendly and convenient form for a Production Manager:
+# Author: Yaling Zheng
+# June 18, 2012
+
+validflag=1
+optiong=""
+optionr=""
+readinggroup_flag=0
+readingresource_flag=0
+optionh=0
+optionq=0
+options=0
+optionm=0
+optionl=0
+allparameters=$@
+
+function ReadArguments {
+    # $@ are all the parameters
+    local index=0
+    echo all parameters $allparameters
+    for ele in $allparameters
+    do 
+	if [ $readinggroup_flag -eq 1 ]
+	then
+	    optiong=$ele
+	    readinggroup_flag=0
+	    echo option group is
+	    echo $optiong
+	else
+	    if [ $readingresource_flag -eq 1 ]
+	    then
+		optionr=$ele
+		readingresource_flag=0
+		echo option resource is
+		echo $optionr
+	    else
+		case $ele in
+		    "-h")
+			optionh=1
+			echo option h exists ...
+			;;
+		    "-g")
+			pos_group=$[ $index + 2 ]
+			if [ $pos_group -le $# ]
+			then
+			    readinggroup_flag=1
+			else
+			    echo invalid options ...
+			    validflag=0
+			    break
+			fi
+			;;
+		    "-r")
+			pos_resource=$[ $index + 2 ]
+			if [ $pos_resource -le $# ]
+			then
+			    readingresource_flag=1
+			else
+			    echo invalid options ...
+			    validflag=0
+			    break
+			fi
+			;;
+		    "-q") # show quota
+			optionq=1
+			echo option q exists ...
+			;;
+		    "-s") # show status of the resource
+			options=1
+			echo option s exists ...
+			;;
+		    "-m") # show resource metadata
+			optionm=1
+			echo option m exists ...
+			;;
+		    "-l") # show complete information about resources
+			optionl=1
+			echo option l exists ...
+			;;
+		    *)
+			echo "other"
+			;;
+		esac
+	    fi
+	fi
+	index=$[ $index + 1 ]
+    done 
+    # optionq=1 means print quota_flag
+    # options=1 means print status_flag 
+    # optionm=1 means print surl and endpath
+    # optiong is the group name
+    # optionr is the resource name
+    if [ $optionl -eq 1 ]
+    then
+	optionq=1
+	options=1
+	optionm=1
+    fi
+}
+
+# Check the exclusive of the options
+function printhelp {
+    echo ilsresc_org [-hqsml] [-g group_name][-r resc_name]
+    echo -h/--help shows help
+    echo no options - shows list of resources
+    echo -g/--group -restricted to the resources that support this group
+    echo -r/--resource -restricted to a specified resource
+    echo "-q/--quota shows resource quota(available and used in MB)"
+    echo -s/--status shows status of the resource
+    echo -m/--meta shows resource metadata
+    echo -l/--list shows complete information about resources
+}
+
+
+declare -A GroupResourceQuotaHashmap
+declare -A GroupResourceQuotaMBHashmap
+
+function buildGroupResourceQuotaHashmap {
+    local groupname=""
+    local reading_groupflag=0
+    local resourcename=""
+    local reading_resourceflag=0
+    local reading_quotaflag=0
+    local reading_overflag=0
+    local quota=0
+    local over=0
+    local groupresourceindex=1
+    for ele in `iquota`
+    do
+	if [ $reading_resourceflag -eq 1 ]
+	then
+	    resourcename=$ele
+	    reading_resourceflag=0
+	    continue
+	fi
+	if [ $reading_groupflag -eq 1 ]
+	then    
+	    groupname=$ele
+	    reading_groupflag=0
+	    continue
+	fi
+	if [ $reading_quotaflag -eq 1 ]
+	then
+	    quota=`echo ${ele//,/}`
+	    reading_quotaflag=0
+	    continue
+	fi
+	if [ $reading_overflag -eq 1 ]
+	then
+	    over=`echo ${ele//,/}`
+	    reading_overflag=0
+	    used=`expr $quota + $over`
+	    MBquota=`expr $quota / 1048576`
+	    MBused=`expr $used / 1048576`
+	    GroupResourceQuotaHashmap["$groupname:$resourcename"]="Quota:$quota byte(s) Used:$used byte(s)"
+	    GroupResourceQuotaMBHashmap["$groupname:$resourcename"]="Quota:$MBquota MB Used:$MBused MB"
+	    continue
+	fi
+	case "$ele" in
+	    "Resource:") 
+		reading_resourceflag=1 
+		;;
+	    "Group:")
+		reading_groupflag=1
+		;;
+	    "Quota:")
+		reading_quotaflag=1
+		;;
+	    "Over:")
+		reading_overflag=1
+		;;
+	    *)
+		;;
+	esac
+    done
+}
+
+# after the following function, group resource is in the groupresourcelist
+
+declare -a ResourceStatusHashmap
+
+function buildResourceStatusHashmap {
+    # the first parameter is the resource name
+    # the resourcename is after "name:" 
+    # the status is after "status"
+    local reading_resourcename_flag=0
+    local reading_status_flag=0
+    local index=0
+    local status=""
+    local resourcename
+    for ele in `ilsresc -l`
+    do
+	if [ $reading_resourcename_flag -eq 1 ]
+	then
+	    resourcename=$ele
+	    reading_resourcename_flag=0
+	    continue
+	fi
+	if [ $reading_status_flag -eq 1 ]
+	then
+	    status=$ele
+	    reading_status_flag=0
+	    ResourceStatusHashmap["$resourcename"]=$status
+	    continue
+	fi
+	case "$ele" in
+	    "name:")
+		reading_resourcename_flag=1
+		;;
+	    "status:")
+		reading_status_flag=1
+		;;
+            *)
+		;;
+	esac
+    done
+}
+
+declare -a resourcemetainfo
+
+function getResourceSURL {
+    local resourcename=$1
+    local gap=2
+    resourcemetainfo=`imeta ls -R $resourcename`
+    local gapcounter=0
+    local surlvalue=""
+    for item in ${resourcemetainfo[@]}
+    do
+	if [ $gapcounter -eq 2 ]
+	then
+	    surlvalue=$item
+	    break
+	fi
+	if [ $gapcounter -eq 1 ]
+	then
+	    gapcounter=$[ $gapcounter + 1 ]
+	fi
+	if [ "$item" == "surl" ]
+	then
+	    gapcounter=1
+	fi
+    done
+    echo "SURL: $surlvalue"
+}
+
+function getGroupResourceEndPath {
+    local groupname=$1
+    local resourcename=$2
+    local EndPathvalue=""
+    local gap=2
+    local gapcounter=0
+    resourcemetainfo=`imeta ls -R $resourcename`
+    for item in ${resourcemetainfo[@]}
+    do
+	if [ $gapcounter -eq 2 ]
+	then
+	    EndPathvalue=$item
+	    break
+	fi
+	if [ $gapcounter -eq 1 ]
+	then
+	    gapcounter=$[ $gapcounter + 1 ]
+	fi
+	if [ "$item" == "$groupname" ]
+	then
+	    gapcounter=1
+	fi
+    done
+    echo "EndPath:$EndPathvalue"
+}
+
+function main {
+    local currentresourcename
+    local currentgroupname
+    ReadArguments
+    if [ $validflag -eq 0 ]
+    then
+	printhelp
+    fi
+    
+    if [ $optionh -eq 1 ]
+    then
+	printhelp
+    fi
+
+    buildGroupResourceQuotaHashmap
+    buildResourceStatusHashmap
+    
+    # for all the matching resource (optionr) and group (optiong),
+    # if they match, print out required detail
+    for key in ${!GroupResourceQuotaHashmap[@]}
+    do
+	matched_group_flag=0
+	matched_resource_flag=0
+	currentgroupname=${key%:*}
+	currentresourcename=${key#*:}
+	if [ "$optiong" == "" ] || [ "$optiong" == "$currentgroupname" ]
+	then
+	    matched_group_flag=1
+	fi
+	if [ "$optionr" == "" ] || [ "$optiong" == "$currentresourcename" ]
+	then
+	    matched_resource_flag=1
+	fi
+	if [ $matched_group_flag -eq 1 ] && [ $matched_resource_flag -eq 1 ]
+	then
+	    # that means both match, then we need to print out information
+	    # we surely print out the group name and resource name
+	    echo Group: $currentgroupname    Resource: $currentresourcename
+	    if [ $optionq -eq 1 ]
+	    then
+		quotausedinfo=${GroupResourceQuotaHashmap["$key"]}
+		echo $quotausedinfo
+		quotausedMBinfo=${GroupResourceQuotaMBHashmap["$key"]}
+		echo $quotausedMBinfo
+	    fi
+	    if [ $options -eq 1 ]
+	    then
+		statusinfo=${ResourceStatusHashmap["$currentresourcename"]}
+		echo Status: $statusinfo
+	    fi
+	    if [ $optionm -eq 1 ]
+	    then
+		getResourceSURL $currentresourcename
+		getGroupResourceEndPath $currentgroupname $currentresourcename
+	    fi
+	    echo 
+
+	fi
+    done
+}
+
+main
