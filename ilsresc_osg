@@ -21,7 +21,7 @@ allparameters=$@
 function ReadArguments {
     # $@ are all the parameters
     local index=0
-    echo all parameters $allparameters
+    # echo all parameters $allparameters
     for ele in $allparameters
     do 
 	if [ $readinggroup_flag -eq 1 ]
@@ -41,7 +41,7 @@ function ReadArguments {
 		case $ele in
 		    "-h")
 			optionh=1
-			echo option h exists ...
+			# echo option h exists ...
 			;;
 		    "-g")
 			pos_group=$[ $index + 2 ]
@@ -67,22 +67,22 @@ function ReadArguments {
 			;;
 		    "-q") # show quota
 			optionq=1
-			echo option q exists ...
+			# echo option q exists ...
 			;;
 		    "-s") # show status of the resource
 			options=1
-			echo option s exists ...
+			# echo option s exists ...
 			;;
 		    "-m") # show resource metadata
 			optionm=1
-			echo option m exists ...
+			# echo option m exists ...
 			;;
 		    "-l") # show complete information about resources
 			optionl=1
-			echo option l exists ...
+			# echo option l exists ...
 			;;
 		    *)
-			echo "other"
+			# echo "other"
 			;;
 		esac
 	    fi
@@ -277,14 +277,10 @@ function main {
     local currentresourcename
     local currentgroupname
     ReadArguments
-    if [ $validflag -eq 0 ]
+    if [ $validflag -eq 0 ] || [ $optionh -eq 1 ]
     then
 	printhelp
-    fi
-    
-    if [ $optionh -eq 1 ]
-    then
-	printhelp
+	return
     fi
 
     buildGroupResourceQuotaHashmap
