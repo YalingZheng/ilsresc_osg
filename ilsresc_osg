@@ -17,6 +17,7 @@ options=0
 optionm=0
 optionl=0
 allparameters=$@
+numparameters=$#
 
 function ReadArguments {
     # $@ are all the parameters
@@ -28,15 +29,15 @@ function ReadArguments {
 	then
 	    optiong=$ele
 	    readinggroup_flag=0
-	    echo option group is
-	    echo $optiong
+	    # echo option group is
+	    # echo $optiong
 	else
 	    if [ $readingresource_flag -eq 1 ]
 	    then
 		optionr=$ele
 		readingresource_flag=0
-		echo option resource is
-		echo $optionr
+		# echo option resource is
+		# echo $optionr
 	    else
 		case $ele in
 		    "-h")
@@ -45,7 +46,7 @@ function ReadArguments {
 			;;
 		    "-g")
 			pos_group=$[ $index + 2 ]
-			if [ $pos_group -le $# ]
+			if [ $pos_group -le $numparameters ]
 			then
 			    readinggroup_flag=1
 			else
@@ -56,7 +57,7 @@ function ReadArguments {
 			;;
 		    "-r")
 			pos_resource=$[ $index + 2 ]
-			if [ $pos_resource -le $# ]
+			if [ $pos_resource -le $numparameters ]
 			then
 			    readingresource_flag=1
 			else
@@ -298,7 +299,7 @@ function main {
 	then
 	    matched_group_flag=1
 	fi
-	if [ "$optionr" == "" ] || [ "$optiong" == "$currentresourcename" ]
+	if [ "$optionr" == "" ] || [ "$optionr" == "$currentresourcename" ]
 	then
 	    matched_resource_flag=1
 	fi
